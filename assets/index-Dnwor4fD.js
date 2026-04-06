@@ -40,6 +40,22 @@ const hasSearchParams = (queryKey) => {
 };
 const apiUrl = "https://api.themoviedb.org/3";
 const apiKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxOTgwNTliODA1ZDZmZjdhNzA3OGQyNDAyMWEwOGE0ZCIsIm5iZiI6MTc3NDg0MzU5My41NjQ5OTk4LCJzdWIiOiI2OWM5ZjZjOWZiZWJjZGZjMWY3MzMwNGMiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.xs_0eoeh5SgBvXv3VwkCOJ5ieBHRvAAJNyVBiiAUGLg";
+const isObject = (value) => {
+  return value !== null && typeof value === "object";
+};
+const fromMovieDto = (movie) => {
+  if (!isObject(movie)) return null;
+  if (!("title" in movie)) return null;
+  return {
+    ...movie,
+    poster_path: typeof movie.poster_path === "string" ? movie.poster_path : null,
+    backdrop_path: typeof movie.backdrop_path === "string" ? movie.backdrop_path : null
+  };
+};
+const parseMovies = (rawList) => {
+  if (!Array.isArray(rawList)) throw new Error("Invalid data");
+  return rawList.map(fromMovieDto).filter((movie) => movie !== null);
+};
 class ApiError extends Error {
   status_code;
   constructor(message, status_code) {
@@ -58,7 +74,13 @@ const getMoviePopular = async ({
       Authorization: `Bearer ${apiKey}`
     }
   });
-  if (res.ok) return await res.json();
+  if (res.ok) {
+    const data = await res.json();
+    return {
+      ...data,
+      results: parseMovies(data.results)
+    };
+  }
   const errorBody = await res.json();
   throw new ApiError(errorBody.status_message, errorBody.status_code);
 };
@@ -70,7 +92,11 @@ const getTopRatedMovie = async () => {
       Authorization: `Bearer ${apiKey}`
     }
   });
-  return await res.json();
+  const data = await res.json();
+  return {
+    ...data,
+    results: parseMovies(data.results)
+  };
 };
 const getSearchMovie = async ({
   page,
@@ -83,15 +109,22 @@ const getSearchMovie = async ({
       Authorization: `Bearer ${apiKey}`
     }
   });
-  return await res.json();
+  const data = await res.json();
+  return {
+    ...data,
+    results: parseMovies(data.results)
+  };
 };
-const renderTopRatedMovie = (movies) => {
-  const topRatedMovie = movies.results[0];
+const renderTopRatedMovie = (topRatedMovie) => {
+  if (!topRatedMovie) return;
   const topRatedContainer = document.querySelector(".top-rated-container");
   if (!topRatedContainer) return null;
   const overlay = document.querySelector(".overlay");
   if (!overlay) return null;
-  overlay.style.background = `url(${`https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces` + topRatedMovie.backdrop_path}) center center no-repeat`;
+  const BASE_URL = `https://media.themoviedb.org/t/p/w1920_and_h800_multi_faces`;
+  const FALLBACK = "/images/no_image_large.png";
+  const backgroundImage = topRatedMovie.backdrop_path ? BASE_URL + topRatedMovie.backdrop_path : FALLBACK;
+  overlay.style.backgroundImage = `url(${backgroundImage}), url(${FALLBACK}) `;
   const rateValue = topRatedContainer.querySelector(".rate-value");
   if (!rateValue) return null;
   rateValue.textContent = topRatedMovie.vote_average.toString();
@@ -135,7 +168,12 @@ const createMovieNode = (movie) => {
   movieItem.dataset.movieId = String(movie.id);
   const thumbnail = movieFragment.querySelector(".thumbnail");
   if (!thumbnail) return null;
-  thumbnail.src = `https://media.themoviedb.org/t/p/w220_and_h330_face` + movie.poster_path;
+  const BASE_URL = `https://media.themoviedb.org/t/p/w220_and_h330_face`;
+  const FALLBACK = "/images/no_image.png";
+  thumbnail.src = movie.poster_path ? BASE_URL + movie.poster_path : FALLBACK;
+  thumbnail.onerror = () => {
+    thumbnail.src = FALLBACK;
+  };
   thumbnail.alt = movie.title;
   const itemDesc = movieFragment.querySelector(".item-desc");
   const rate = itemDesc?.querySelector("span");
@@ -167,7 +205,7 @@ const renderNoResult = () => {
     /* html */
     `
   <p class="message-box">
-    <img src="./public/images/mascot.png" alt="" />
+    <img src="/images/mascot.png" alt="" />
     <span>검색 결과가 없습니다.</span>
   </p>`
   );
@@ -262,7 +300,8 @@ const errorTryCatch = async (api, errorCallback) => {
 addEventListener("load", async () => {
   (async () => {
     const topRatedMovies = await getTopRatedMovie();
-    renderTopRatedMovie(topRatedMovies);
+    const topRatedMovie = topRatedMovies.results[0];
+    renderTopRatedMovie(topRatedMovie);
   })();
   (async () => {
     renderSkeleton();
