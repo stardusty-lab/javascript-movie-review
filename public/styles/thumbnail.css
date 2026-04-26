@@ -1,10 +1,14 @@
 @import "./colors.css";
-
+#app {
+  min-height: 1000px;
+}
 .thumbnail-list {
   margin: 0 auto 56px;
   display: grid;
   grid-template-columns: repeat(5, 200px);
   gap: 70px;
+  align-items: start;
+  align-content: start; 
 }
 
 .thumbnail {

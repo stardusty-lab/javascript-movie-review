@@ -1,190 +1,59 @@
-import { navigate, getSearchParams, hasSearchParams } from "./utils/router";
+import { getMoviePopular } from "./services/api";
+import { renderMovieList } from "./renders/movieList";
 
-import {
-  ApiError,
-  getMoviePopular,
-  getTopRatedMovie,
-  getSearchMovie,
-  getMovieMovieId,
-} from "./services/api";
+import { moviesFixture } from "../test/fixtures";
+import { Movie } from "./services/dto";
 
-import {
-  renderTopRatedMovie,
-  removeTopRatedMovie,
-} from "./renders/topRatedMovie";
-import {
-  renderMovieList,
-  renderNoResult,
-  removeMovieList,
-} from "./renders/movieList";
-import { renderSkeleton, removeSkeleton } from "./renders/skeleton";
+let page = 1; // 페이지 값 저장
+let totalPages: null | number; // 총 페이지 수 저장
 
-import { renderDetailModal, removeDetailModal, } from "./renders/detailModal";
+const loadMovie = async () => {
+  const movies = await getMoviePopular({ page });
 
-import PageState from "./states/PageState";
+  totalPages = movies.total_pages;
 
-import MovieListState from "./states/MovieListState";
+  renderMovieList(movies);
 
-// 사용자 상태값
-const pageState = new PageState();
+  return;
+  // console.log('loadMovie');
+  // const movies = await new Promise((resolve) => {
+  //   resolve({
+  //     results: moviesFixture,
+  //     total_pages: 200
+  //   });
+  // }) as {
+  //   results: Movie[],
+  //   total_pages: number
+  // };
+      
+  // totalPages = movies.total_pages;
 
-// 서버 응답값
-const movieListState = new MovieListState();
+  // renderMovieList(movies);
+  // console.log("loadMovie - end");
+}
 
 const loadInit = () => {
-  const search = getSearchParams("search") as string;
-
-  if(search === null){
-    (async () => {
-      const topRatedMovies = await errorTryCatch(
-        async () => await getTopRatedMovie(),
-        (e: ApiError) => {
-          if (e.status_code == 22) {
-            alert("잘못된 요청입니다.");
-            return;
-          }
-          alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        }
-      );
-
-      const topRatedMovie = topRatedMovies.results[0];
-
-      renderTopRatedMovie(topRatedMovie);
-    })();
-
-    (async () => {
-      renderSkeleton();
-      const page = pageState.getPage();
-      const movies = await errorTryCatch(
-        async () => await getMoviePopular({ page }),
-        async (e: ApiError) => {
-          if (e.status_code == 22) {
-            alert("잘못된 페이지 요청입니다.");
-            return;
-          }
-          alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        },
-      );
-
-      if (movies) {
-        movieListState.setTotalPages(movies.total_pages);
-
-        renderMovieList(movies);
-      }
-      removeSkeleton(Date.now());
-    })();
-  } else {
-    runSearch();
-  }
+  loadMovie();
 }
 
-const runSearch = () => {
-  const search = getSearchParams("search") as string;
-
-  (async () => {
-    const page = pageState.getPage();
-    const movies = await errorTryCatch(
-      async () => await getSearchMovie({
-        page,
-        query: search || "",
-      }), (e: ApiError) => {
-        if(e.status_code === 22){
-          alert("잘못된 검색 요청입니다.");
-            return;
-        }
-        alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-      }
-    );
-
-    movieListState.setTotalPages(movies.total_pages);
-
-    removeTopRatedMovie();
-
-    const movieListTitle = document.querySelector("#movie-list-title");
-    if (!movieListTitle) return null;
-    movieListTitle.textContent = `"${search}" 검색 결과`;
-
-    if (movies.results.length) {
-      renderMovieList(movies);
-    } else {
-      renderNoResult();
-    }
-  })();
-};
-
-const handleSearch = () => {
-  const searchInput = document.querySelector<HTMLInputElement>("#search-input");
-  if (!searchInput) return;
-
-  const search = searchInput.value || "";
-  if (!search.length) {
-    searchInput.focus();
-    return;
-  }
-
-  pageState.resetPage();
-  navigate(`/?search=${search}`);
-
-  removeMovieList();
-  runSearch();
-};
-
-export const handleDetail = (id: number) => {
-  (async () => {
-    const movieInfo = await getMovieMovieId({id});
-    renderDetailModal(movieInfo);
-  })();
-}
-
-const handleMoreMovie = () => {
-  const totalPages = movieListState.getTotalPages();
-  const page = pageState.getPage();
-
+const handleMoreMovie = async () => {
   if(totalPages === page) return;
 
-  pageState.increamentPage();
-  const isSearchParams = hasSearchParams("search");
+  page++;
 
-  if (isSearchParams) {
-    runSearch();
-    return;
-  }
-  (async () => {
-    const page = pageState.getPage();
+  const movies = await getMoviePopular({ page })
+  
+  totalPages = movies.total_pages;
 
-    const movies = await errorTryCatch(
-      async () => await getMoviePopular({ page }),
-      async (e: ApiError) => {
-        if (e.status_code == 22) {
-          alert("잘못된 페이지 요청입니다.");
-          return;
-        }
-        alert("영화 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-      },
-    );
-
-    if (movies) {
-      movieListState.setTotalPages(movies.total_pages);
-
-      renderMovieList(movies);
-    }
-  })(); 
+  renderMovieList(movies);
+  console.log("handleMoreMovie - end");
 }
 
-const errorTryCatch = async (api: Function, errorCallback: Function) => {
-  try {
-    return await api();
-  } catch (e) {
-    errorCallback(e);
-  }
-};
-
-addEventListener("load", async () => {
-
+addEventListener("load", () => {
   loadInit();
 
   document.addEventListener('scroll', () => {
-
+    console.log("scrollevent")
     const getIsBottom = () => {
       const movieList = document.querySelector<HTMLUListElement>("#movie-list");
       if(!movieList) return;
@@ -204,25 +73,6 @@ addEventListener("load", async () => {
 
     if(getIsBottom()){
       handleMoreMovie();
-    }
-  });
-
-  const searchButton = document.querySelector("#search-button");
-  searchButton?.addEventListener("click", () => {
-    handleSearch();
-  });
-
-  const searchInput = document.querySelector<HTMLInputElement>("#search-input");
-  if (!searchInput) return;
-  searchInput?.addEventListener("keyup", (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch();
-    }
-  });
-
-  document.addEventListener('keyup', (e) => {
-    if (e.key === "Escape") {
-      removeDetailModal();
     }
   });
 });
